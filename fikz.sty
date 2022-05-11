@@ -8,21 +8,27 @@
 %% International License (https://creativecommons.org/licenses/by-sa/4.0/).
 %% ---------------------------------------------------------------------------
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{fikz}[2021/08/26 by Benjamin Bernard]
+\ProvidesPackage{fikz}[2022/04/29 by Benjamin Bernard]
 %
 \RequirePackage{tikz}
 %
 \makeatletter
 \newif\ifbeamerloaded@fikz
+\newif\ifexternal@fikz
 \newif\ifoption@fikz
 %
 \DeclareOption{doc}{\option@fikztrue\beamerloaded@fikzfalse}
 \DeclareOption{beamer}{\option@fikztrue\beamerloaded@fikztrue}
+\DeclareOption{external}{\external@fikztrue}
 \ProcessOptions\relax
 %
 \ifoption@fikz\else
 	\@ifclassloaded{beamer}{\beamerloaded@fikztrue}{\beamerloaded@fikzfalse}
 \fi
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%	   Auxiliary macro
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 \def\ifempty@fikz#1{
 	\ifx\relax#1\relax
@@ -31,6 +37,10 @@
 		\expandafter\@secondoftwo
 	\fi
 }
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%	   Fixing overlay behavior
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 \newcommand{\fixtikzpath}[2][]{
 	\ifempty@fikz{#1}{
@@ -50,18 +60,9 @@
 			\ifempty@fikz{#1}{\path[#2] ##2;}{\path[#1] ##2;}
 		\fi
 	}
-	\expandafter\def\csname #2@check@fikz\endcsname{
-		\ifx\next@fikz<
-			\expandafter\expandafter\csname #2@gobble@fikz\endcsname
-		\else
-			\expandafter\expandafter\csname #2@standard@fikz\endcsname
-		\fi
-	}
-	\expandafter\def\csname #2\endcsname{\expandafter\futurelet\expandafter\next@fikz\csname #2@check@fikz\endcsname}
+	\expandafter\def\csname #2\endcsname{\@ifnextchar<{\csname #2@gobble@fikz\endcsname}{\csname #2@standard@fikz\endcsname}}
 }
-%
 \def\fixtikznode{
-	\def\node@standard@fikz{\tikz@path@overlay{node}}
 	\def\node@gobble@fikz<##1>##2;{
 		\ifbeamerloaded@fikz
 			\def\overlay@fikz{<##1>}
@@ -70,16 +71,8 @@
 			\tikz@path@overlay{node} ##2;
 		\fi
 	}
-	\def\node@check@fikz{
-		\ifx\next@fikz<
-			\expandafter\node@gobble@fikz
-		\else
-			\expandafter\node@standard@fikz
-		\fi
-	}
-	\def\node{\futurelet\next@fikz\node@check@fikz}
+	\def\node{\@ifnextchar<{\node@gobble@fikz}{\tikz@path@overlay{node}}}
 }
-%
 \tikzset{every picture/.code={
 	\fixtikzpath{draw}
 	\fixtikzpath{fill}
@@ -87,4 +80,41 @@
 	\fixtikzpath[fill, draw]{filldraw}
 	\fixtikznode
 }}
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%	  Externalizing Tikz Images
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+\def\externalize#1{}
+\def\externalizetikz{
+	\usetikzlibrary{external}
+	\makeatletter
+	\ifbeamerloaded@fikz
+		\mode<beamer|second|trans|article>{\tikzexternalize[prefix=tikz/]}
+		\mode<handout>{\tikzexternalize[prefix=tikz/handout/]}
+	\else
+		\tikzexternalize[prefix=tikz/]
+	\fi
+	\tikzset{
+		beamer externalizing/.style={%
+			execute at end picture={%
+				\tikzifexternalizing{%
+					\ifbeamer@anotherslide
+						\pgfexternalstorecommand{\string\global\string\beamer@anotherslidetrue}%
+					\fi
+				}{}%
+			}%
+		},
+	external/optimize=false
+	}
+	\ifbeamerloaded@fikz
+		\mode<beamer|second|trans|article>{\def\externalize##1{\tikzsetnextfilename{##1-\number\beamer@slideinframe}}}
+		\mode<handout>{\def\externalize##1{\tikzsetnextfilename{##1}}}
+	\else
+		\def\externalize##1{\tikzsetnextfilename{##1}}
+	\fi
+	\tikzset{every picture/.style={beamer externalizing}}
+	\makeatother
+}
+\ifexternal@fikz\externalizetikz\fi
 \makeatother
